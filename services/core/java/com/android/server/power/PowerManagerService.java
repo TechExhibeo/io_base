@@ -190,6 +190,9 @@ public final class PowerManagerService extends SystemService
     private DreamManagerInternal mDreamManager;
     private Light mAttentionLight;
     private Light mButtonsLight;
+    private Light mKeyboardLight;
+    private Light mCapsLight;
+    private Light mFnLight;
 
     private final Object mLock = new Object();
 
@@ -494,6 +497,7 @@ public final class PowerManagerService extends SystemService
     private static native void nativeSetAutoSuspend(boolean enable);
     private static native void nativeSendPowerHint(int hintId, int data);
     private static native void nativeSetFeature(int featureId, int data);
+    private boolean mKeyboardVisible = false;
 
     private SensorManager mSensorManager;
     private Sensor mProximitySensor;
@@ -582,6 +586,9 @@ public final class PowerManagerService extends SystemService
             mLightsManager = getLocalService(LightsManager.class);
             mAttentionLight = mLightsManager.getLight(LightsManager.LIGHT_ID_ATTENTION);
             mButtonsLight = mLightsManager.getLight(LightsManager.LIGHT_ID_BUTTONS);
+            mKeyboardLight = mLightsManager.getLight(LightsManager.LIGHT_ID_KEYBOARD);
+            mCapsLight = mLightsManager.getLight(LightsManager.LIGHT_ID_CAPS);
+            mFnLight = mLightsManager.getLight(LightsManager.LIGHT_ID_FUNC);
 
             // Initialize display power management.
             mDisplayManagerInternal.initPowerManagement(
@@ -1666,12 +1673,16 @@ public final class PowerManagerService extends SystemService
                     if (now < nextTimeout) {
                         if (now > mLastUserActivityTime + BUTTON_ON_DURATION) {
                             mButtonsLight.setBrightness(0);
+                            mKeyboardLight.setBrightness(0);
                         } else {
                                 if (!mProximityPositive) {
                                     mButtonsLight.setBrightness(buttonBrightness);
+	                            mKeyboardLight.setBrightness(mKeyboardVisible ? mDisplayPowerRequest.screenBrightness : 0);
                                     if (buttonBrightness != 0 && mButtonTimeout != 0) {
                                         nextTimeout = now + mButtonTimeout;
                                     }			}
+                            nextTimeout = now + BUTTON_ON_DURATION;
+                        }
                         mUserActivitySummary = USER_ACTIVITY_SCREEN_BRIGHT;
                     } else {
                         nextTimeout = mLastUserActivityTime + screenOffTimeout;
@@ -3445,6 +3456,39 @@ public final class PowerManagerService extends SystemService
             wakeUp(eventTime, reason, opPackageName, true);
         }
 
+         @Override // Binder call
+         public void setKeyboardVisibility(boolean visible) {
+             synchronized (mLock) {
+                 if (DEBUG_SPEW) {
+                     Slog.d(TAG, "setKeyboardVisibility: " + visible);
+                 }
+                 if (mKeyboardVisible != visible) {
+                     mKeyboardVisible = visible;
+                     if (!visible) {
+                         mKeyboardLight.turnOff();
+                         // If hiding keyboard, turn off leds
+                         setKeyboardLight(false, 1);
+                         setKeyboardLight(false, 2);
+                     }
+                 }
+             }
+         }
+ 
+         @Override // Binder call
+         public void setKeyboardLight(boolean on, int key) {
+             if (key == 1) {
+                 if (on)
+                     mCapsLight.setColor(0x00ffffff);
+                 else
+                     mCapsLight.turnOff();
+             } else if (key == 2) {
+                 if (on)
+                     mFnLight.setColor(0x00ffffff);
+                 else
+                     mFnLight.turnOff();
+             }
+         }
+ 
         @Override // Binder call
         public void wakeUp(long eventTime, String reason, String opPackageName) {
             wakeUp(eventTime, reason, opPackageName, false);
