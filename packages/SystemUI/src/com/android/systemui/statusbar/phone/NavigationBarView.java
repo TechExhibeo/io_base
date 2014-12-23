@@ -431,6 +431,7 @@ public class NavigationBarView extends BaseNavigationBar {
         getImeSwitchButton().setOnClickListener(mImeSwitcherClickListener);
 
         mDeadZone = (DeadZone) mCurrentView.findViewById(R.id.deadzone);
+        mDeadZone.setStartFromRight(mLeftInLandscape);
 
         // force the low profile & disabled states into compliance
         mBarTransitions.init();
